@@ -54,6 +54,9 @@ disabled.
 - `www/index.html` — the whole test app: a looping muted video, a live
   play/pause status readout, an event log, and buttons that trigger each
   variant of the bridge call.
+- `www/assets/sample.mp4` — bundled 12s H.264 (Constrained Baseline) test
+  clip with a running counter, generated with ffmpeg's `testsrc`, so the
+  repro needs no network access.
 - `ios/` — not committed; it is 100% stock output of `npx cap add ios`
   (no manual changes), so it is generated as part of the setup steps below.
 
@@ -105,7 +108,6 @@ bridge (not cookie access itself) is what pauses playback.
 
 - `@capacitor/core` / `@capacitor/cli` / `@capacitor/ios`: 7.6.8 (pinned
   exactly in `package.json`)
-- Video: any playing HTML5 media element; this repro streams a public sample
-  MP4 (Big Buck Bunny). To run fully offline, drop a small MP4 at
-  `www/assets/sample.mp4` — the page prefers it automatically (re-run
-  `npx cap sync ios` after adding it).
+- Video: any playing HTML5 media element reproduces it; this repro plays the
+  bundled `www/assets/sample.mp4` (to swap in another clip, replace that file
+  and re-run `npx cap sync ios`).

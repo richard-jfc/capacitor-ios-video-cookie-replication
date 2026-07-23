@@ -54,7 +54,7 @@
   <h1>CapacitorCookies → video pause repro</h1>
 
   <video id="video" playsinline muted loop preload="auto" controls
-         src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"></video>
+         src="assets/sample.mp4"></video>
 
   <div id="status">status: not started</div>
   <div id="patchState"></div>
@@ -95,6 +95,9 @@
       .forEach((ev) => video.addEventListener(ev, () => {
         const cls = ev === 'pause' ? 'pause' : (ev === 'play' || ev === 'playing' ? 'play' : '');
         log(`video event: "${ev}" (currentTime=${video.currentTime.toFixed(2)})`, cls);
+        if (ev === 'error' && video.error) {
+          log(`video.error: code=${video.error.code} message="${video.error.message}" src=${video.currentSrc}`, 'pause');
+        }
       }));
 
     setInterval(() => {
@@ -147,17 +150,6 @@
         log('polling: reading document.cookie every 2s', 'action');
       }
     });
-
-    // Optional offline mode: drop any small mp4 at www/assets/sample.mp4 and
-    // it will be preferred over the remote sample video.
-    fetch('assets/sample.mp4', { method: 'HEAD' })
-      .then((r) => {
-        if (r.ok) {
-          video.src = 'assets/sample.mp4';
-          log('using local assets/sample.mp4');
-        }
-      })
-      .catch(() => {});
   </script>
 </body>
 </html>
