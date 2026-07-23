@@ -1,0 +1,10 @@
+{
+  "appId": "com.example.cookievideopause",
+  "appName": "CookieVideoPause",
+  "webDir": "www",
+  "plugins": {
+    "CapacitorCookies": {
+      "enabled": true
+    }
+  }
+}

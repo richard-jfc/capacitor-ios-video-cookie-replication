@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>CapacitorCookies video pause repro</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+      font-family: -apple-system, system-ui, sans-serif;
+      background: #111;
+      color: #eee;
+    }
+    h1 { font-size: 1.1rem; margin: 4px 0 8px; }
+    video { width: 100%; background: #000; border-radius: 8px; }
+    #status {
+      font-variant-numeric: tabular-nums;
+      padding: 8px;
+      margin: 8px 0;
+      border-radius: 8px;
+      background: #1c3a1c;
+    }
+    #status.paused { background: #4a1c1c; }
+    .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    button {
+      padding: 12px 8px;
+      font-size: 0.9rem;
+      border: 0;
+      border-radius: 8px;
+      background: #2b6cb0;
+      color: #fff;
+    }
+    button.primary { background: #2f855a; grid-column: 1 / -1; font-size: 1rem; }
+    #patchState { font-size: 0.8rem; opacity: 0.8; margin: 8px 0; }
+    #log {
+      margin-top: 10px;
+      padding: 8px;
+      background: #000;
+      border-radius: 8px;
+      font: 0.75rem/1.5 ui-monospace, Menlo, monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 40vh;
+      overflow-y: auto;
+    }
+    #log .pause { color: #ff6b6b; font-weight: bold; }
+    #log .play { color: #69db7c; }
+    #log .action { color: #74c0fc; }
+  </style>
+</head>
+<body>
+  <h1>CapacitorCookies → video pause repro</h1>
+
+  <video id="video" playsinline muted loop preload="auto" controls
+         src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"></video>
+
+  <div id="status">status: not started</div>
+  <div id="patchState"></div>
+
+  <div class="buttons">
+    <button class="primary" id="startBtn">▶ Start test (plays video, reads cookie after 3s)</button>
+    <button id="getBtn">Read document.cookie</button>
+    <button id="setBtn">Set document.cookie</button>
+    <button id="promptBtn">Raw prompt() bridge call</button>
+    <button id="pollBtn">Toggle 2s cookie polling</button>
+  </div>
+
+  <div id="log"></div>
+
+  <script>
+    const video = document.getElementById('video');
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+    const t0 = performance.now();
+
+    function log(msg, cls) {
+      const line = document.createElement('div');
+      if (cls) line.className = cls;
+      line.textContent = `[${((performance.now() - t0) / 1000).toFixed(2)}s] ${msg}`;
+      logEl.prepend(line);
+    }
+
+    // --- Report whether Capacitor's document.cookie patch is active ---------
+    // Capacitor's native-bridge defines `cookie` as an own property of
+    // `document`; the native WebKit accessor lives on Document.prototype.
+    const patched = !!Object.getOwnPropertyDescriptor(document, 'cookie');
+    const platform = window.Capacitor ? window.Capacitor.getPlatform() : 'no Capacitor bridge';
+    document.getElementById('patchState').textContent =
+      `platform: ${platform} · CapacitorCookies document.cookie patch: ${patched ? 'ACTIVE (reads go through prompt())' : 'inactive (native cookie access)'}`;
+
+    // --- Video state instrumentation ----------------------------------------
+    ['play', 'playing', 'pause', 'waiting', 'stalled', 'suspend', 'ended', 'error']
+      .forEach((ev) => video.addEventListener(ev, () => {
+        const cls = ev === 'pause' ? 'pause' : (ev === 'play' || ev === 'playing' ? 'play' : '');
+        log(`video event: "${ev}" (currentTime=${video.currentTime.toFixed(2)})`, cls);
+      }));
+
+    setInterval(() => {
+      statusEl.textContent = `status: ${video.paused ? 'PAUSED' : 'playing'} · currentTime=${video.currentTime.toFixed(2)}`;
+      statusEl.classList.toggle('paused', video.paused);
+    }, 250);
+
+    // --- The triggers --------------------------------------------------------
+    function readCookie(label) {
+      log(`${label}: reading document.cookie …`, 'action');
+      const start = performance.now();
+      const value = document.cookie; // with CapacitorCookies enabled on iOS this runs prompt()
+      log(`${label}: document.cookie returned "${value}" in ${(performance.now() - start).toFixed(1)}ms`, 'action');
+    }
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      log('start: calling video.play()', 'action');
+      video.play().catch((e) => log(`video.play() rejected: ${e}`, 'pause'));
+      log('start: will read document.cookie in 3s — watch for the video pausing', 'action');
+      setTimeout(() => readCookie('auto'), 3000);
+    });
+
+    document.getElementById('getBtn').addEventListener('click', () => readCookie('manual'));
+
+    document.getElementById('setBtn').addEventListener('click', () => {
+      log('manual: setting document.cookie (also a prompt() bridge call on iOS) …', 'action');
+      document.cookie = `repro=${Math.round(performance.now())}`;
+      log('manual: document.cookie setter returned', 'action');
+    });
+
+    document.getElementById('promptBtn').addEventListener('click', () => {
+      // Exactly what Capacitor's patched cookie getter does internally.
+      // Capacitor's WKUIDelegate answers it natively, so no dialog is shown —
+      // but WebKit still pauses media for the (invisible) modal dialog.
+      log('manual: prompt(JSON.stringify({type: "CapacitorCookies.get"})) …', 'action');
+      const res = prompt(JSON.stringify({ type: 'CapacitorCookies.get' }));
+      log(`manual: prompt() returned "${res}"`, 'action');
+    });
+
+    let pollTimer = null;
+    document.getElementById('pollBtn').addEventListener('click', () => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        log('polling: stopped', 'action');
+      } else {
+        // Simulates real-world code (analytics/auth SDKs etc.) that reads
+        // document.cookie periodically: the video can never keep playing.
+        pollTimer = setInterval(() => readCookie('poll'), 2000);
+        log('polling: reading document.cookie every 2s', 'action');
+      }
+    });
+
+    // Optional offline mode: drop any small mp4 at www/assets/sample.mp4 and
+    // it will be preferred over the remote sample video.
+    fetch('assets/sample.mp4', { method: 'HEAD' })
+      .then((r) => {
+        if (r.ok) {
+          video.src = 'assets/sample.mp4';
+          log('using local assets/sample.mp4');
+        }
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>
