@@ -106,8 +106,8 @@ bridge (not cookie access itself) is what pauses playback.
 
 ## Versions
 
-- `@capacitor/core` / `@capacitor/cli` / `@capacitor/ios`: 7.6.8 (pinned
-  exactly in `package.json`)
+- `@capacitor/core` / `@capacitor/cli` / `@capacitor/ios`: 8.4.2 (pinned
+  exactly in `package.json`; also reproduces on 7.x, e.g. 7.6.8)
 - Video: any playing HTML5 media element reproduces it; this repro plays the
   bundled `www/assets/sample.mp4` (to swap in another clip, replace that file
   and re-run `npx cap sync ios`).
